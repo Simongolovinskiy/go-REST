@@ -11,6 +11,7 @@ services:
       - db
 
   db:
+    container_name: go_db
     image: postgres:15
     environment:
       POSTGRES_USER: ${POSTGRES_USER}

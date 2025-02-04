@@ -6,15 +6,21 @@ import (
 	"go-REST/internal/model"
 )
 
-type TransactionRepository struct {
+type TransactionRepository interface {
+	Deposit(userID int, amount float64) error
+	Transfer(senderID, recipientID int, amount float64) error
+	GetLastTransactions(userID int) ([]model.Transaction, error)
+}
+
+type TransactionRepositoryImpl struct {
 	db *pgxpool.Pool
 }
 
-func NewTransactionRepository(db *pgxpool.Pool) *TransactionRepository {
-	return &TransactionRepository{db: db}
+func NewTransactionRepository(db *pgxpool.Pool) TransactionRepository {
+	return &TransactionRepositoryImpl{db: db}
 }
 
-func (r *TransactionRepository) Deposit(userID int, amount float64) error {
+func (r *TransactionRepositoryImpl) Deposit(userID int, amount float64) error {
 	query := `
         INSERT INTO transactions (user_id, amount, type)
         VALUES ($1, $2, 'deposit')
@@ -23,12 +29,16 @@ func (r *TransactionRepository) Deposit(userID int, amount float64) error {
 	return err
 }
 
-func (r *TransactionRepository) Transfer(senderID, recipientID int, amount float64) error {
+func (r *TransactionRepositoryImpl) Transfer(senderID, recipientID int, amount float64) error {
 	tx, err := r.db.Begin(context.Background())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.Background())
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(context.Background())
+		}
+	}()
 
 	querySender := `
         INSERT INTO transactions (user_id, amount, type)
@@ -51,7 +61,7 @@ func (r *TransactionRepository) Transfer(senderID, recipientID int, amount float
 	return tx.Commit(context.Background())
 }
 
-func (r *TransactionRepository) GetLastTransactions(userID int) ([]model.Transaction, error) {
+func (r *TransactionRepositoryImpl) GetLastTransactions(userID int) ([]model.Transaction, error) {
 	query := `
         SELECT id, user_id, amount, type, created_at
         FROM transactions
